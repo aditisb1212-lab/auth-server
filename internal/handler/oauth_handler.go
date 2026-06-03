@@ -1,22 +1,30 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roshankumar0036singh/auth-server/internal/repository"
 	"github.com/roshankumar0036singh/auth-server/internal/service"
 )
 
 type OAuthHandler struct {
 	oauthProviderService *service.OAuthProviderService
-	userRepo             interface{} // Will need user repository to fetch user data
+	userRepo             *repository.UserRepository
 }
 
-func NewOAuthHandler(oauthProviderService *service.OAuthProviderService) *OAuthHandler {
+func NewOAuthHandler(oauthProviderService *service.OAuthProviderService, userRepo *repository.UserRepository) *OAuthHandler {
+	if userRepo == nil {
+		panic("oauth handler requires user repository")
+	}
+
 	return &OAuthHandler{
 		oauthProviderService: oauthProviderService,
+		userRepo:             userRepo,
 	}
 }
 
@@ -105,12 +113,12 @@ func (h *OAuthHandler) Authorize(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "oauth_consent.html", gin.H{
-		"ClientName":   client.Name,
-		"ClientID":     clientID,
-		"RedirectURI":  redirectURI,
-		"Scope":        scope,
-		"Scopes":       scopeDescriptions,
-		"State":        state,
+		"ClientName":  client.Name,
+		"ClientID":    clientID,
+		"RedirectURI": redirectURI,
+		"Scope":       scope,
+		"Scopes":      scopeDescriptions,
+		"State":       state,
 	})
 }
 
@@ -200,7 +208,7 @@ func (h *OAuthHandler) Token(c *gin.Context) {
 		"access_token": accessToken.Token,
 		"token_type":   "Bearer",
 		"expires_in":   3600, // 1 hour
-		"scope":        strings.Join(accessToken.Scopes," "),
+		"scope":        strings.Join(accessToken.Scopes, " "),
 	})
 }
 
@@ -236,15 +244,52 @@ func (h *OAuthHandler) UserInfo(c *gin.Context) {
 		return
 	}
 
-	// TODO: Fetch user data from database based on accessToken.UserID
-	// For now, return minimal info
-	c.JSON(http.StatusOK, gin.H{
+	user, err := h.userRepo.FindByID(accessToken.UserID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "user_not_found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed_to_fetch_user",
+		})
+		return
+	}
+
+	response := gin.H{
 		"sub":    accessToken.UserID,
 		"scopes": accessToken.Scopes,
-	})
+	}
+
+	if slices.Contains(accessToken.Scopes, "read:profile") {
+		name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+		if name != "" {
+			response["name"] = name
+		}
+		if user.FirstName != "" {
+			response["given_name"] = user.FirstName
+		}
+		if user.LastName != "" {
+			response["family_name"] = user.LastName
+		}
+		if user.ProfileImage != "" {
+			response["picture"] = user.ProfileImage
+		}
+	}
+
+	if slices.Contains(accessToken.Scopes, "read:email") {
+		if user.Email != "" {
+			response["email"] = user.Email
+		}
+		response["email_verified"] = user.EmailVerified
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
-// Helper functions
 func redirectWithCode(c *gin.Context, redirectURI, code, state string) {
 	u, _ := url.Parse(redirectURI)
 	q := u.Query()
