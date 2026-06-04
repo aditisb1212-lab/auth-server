@@ -133,7 +133,36 @@ export class AuthClient {
 
   /** Returns true if the client currently has a valid session */
   public isAuthenticated(): boolean {
-    return this.accessToken !== null;
+    if (!this.accessToken) return false;
+    return !this.isTokenExpired(this.accessToken);
+  }
+
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payloadBase64Url = token.split('.')[1];
+      if (!payloadBase64Url) return true;
+      
+      const payloadBase64 = payloadBase64Url.replace(/-/g, '+').replace(/_/g, '/');
+      let payloadJson = '';
+      
+      if (typeof atob !== 'undefined') {
+        payloadJson = atob(payloadBase64);
+      } else if (typeof globalThis !== 'undefined' && (globalThis as any).Buffer) {
+        payloadJson = (globalThis as any).Buffer.from(payloadBase64, 'base64').toString('utf8');
+      } else {
+        // Can't decode, assume it's valid if we have it (fallback)
+        return false;
+      }
+      
+      const decoded = JSON.parse(payloadJson);
+      if (decoded.exp) {
+        // exp is in seconds, add a small buffer (e.g. 5 seconds) to prevent edge cases
+        return Date.now() >= (decoded.exp * 1000) - 5000;
+      }
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   /** Manually set the session (e.g. from OAuth callback URL params) */

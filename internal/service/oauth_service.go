@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/roshankumar0036singh/auth-server/internal/config"
@@ -45,10 +46,11 @@ func (s *OAuthService) getGoogleConfig(clientID string) (*oauth2.Config, error) 
 		providerConf, err := s.providerRepo.FindByClientAndProvider(clientID, "google")
 		if err == nil && providerConf != nil {
 			decryptedSecret, err := utils.Decrypt(providerConf.ProviderClientSecret, s.cfg.Security.EncryptionKey)
-			if err == nil {
-				oauthClientID = providerConf.ProviderClientID
-				oauthClientSecret = decryptedSecret
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt google client secret: %w", err)
 			}
+			oauthClientID = providerConf.ProviderClientID
+			oauthClientSecret = decryptedSecret
 		}
 	}
 
@@ -81,10 +83,11 @@ func (s *OAuthService) getGitHubConfig(clientID string) (*oauth2.Config, error) 
 		providerConf, err := s.providerRepo.FindByClientAndProvider(clientID, "github")
 		if err == nil && providerConf != nil {
 			decryptedSecret, err := utils.Decrypt(providerConf.ProviderClientSecret, s.cfg.Security.EncryptionKey)
-			if err == nil {
-				oauthClientID = providerConf.ProviderClientID
-				oauthClientSecret = decryptedSecret
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt github client secret: %w", err)
 			}
+			oauthClientID = providerConf.ProviderClientID
+			oauthClientSecret = decryptedSecret
 		}
 	}
 

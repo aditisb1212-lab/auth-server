@@ -31,14 +31,14 @@ func (s *CacheService) BlacklistToken(ctx context.Context, token string, expiry 
 func (s *CacheService) IsTokenBlacklisted(ctx context.Context, token string) (bool, error) {
 	key := fmt.Sprintf("blacklist:%s", token)
 	result, err := s.client.Get(ctx, key).Result()
-	
+
 	if err == redis.Nil {
 		return false, nil // Not blacklisted
 	}
 	if err != nil {
 		return false, err // Error occurred
 	}
-	
+
 	return result == "1", nil
 }
 
@@ -67,12 +67,12 @@ func (s *CacheService) IncrementLoginAttempts(ctx context.Context, email string)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Set expiry on first attempt (15 minutes)
 	if count == 1 {
 		s.client.Expire(ctx, key, 15*time.Minute)
 	}
-	
+
 	return count, nil
 }
 
@@ -80,7 +80,7 @@ func (s *CacheService) IncrementLoginAttempts(ctx context.Context, email string)
 func (s *CacheService) GetLoginAttempts(ctx context.Context, email string) (int64, error) {
 	key := fmt.Sprintf(cacheKeyLoginAttempts, email)
 	count, err := s.client.Get(ctx, key).Int64()
-	
+
 	if err == redis.Nil {
 		return 0, nil
 	}

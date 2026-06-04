@@ -59,7 +59,6 @@ type GitHubOAuthConfig struct {
 	CallbackURL  string
 }
 
-
 type SecurityConfig struct {
 	BcryptRounds           int
 	RateLimitWindow        int
@@ -86,6 +85,11 @@ func LoadConfig() *Config {
 	accountLockDuration, _ := strconv.Atoi(getEnv("ACCOUNT_LOCK_DURATION", "30")) // Minutes
 
 	appURL := getEnv("APP_URL", "http://localhost:3000")
+
+	encKey := getEnv("ENCRYPTION_KEY", "")
+	if encKey == "" || encKey == "0123456789abcdef0123456789abcdef" {
+		log.Fatal("ENCRYPTION_KEY must be set to a unique secret")
+	}
 
 	return &Config{
 		App: AppConfig{
@@ -127,7 +131,7 @@ func LoadConfig() *Config {
 			RateLimitMax:           rateLimitMax,
 			AccountLockMaxAttempts: accountLockMax,
 			AccountLockDuration:    accountLockDuration,
-			EncryptionKey:          getEnv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef"), // default 32 byte key
+			EncryptionKey:          encKey,
 		},
 	}
 }

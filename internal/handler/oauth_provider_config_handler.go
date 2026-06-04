@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -57,7 +58,7 @@ func (h *OAuthProviderConfigHandler) CreateOrUpdateProviderConfig(c *gin.Context
 
 	err := h.providerService.CreateOrUpdateProviderConfig(userID.(string), clientID, provider, req.ProviderClientID, req.ProviderClientSecret)
 	if err != nil {
-		if err.Error() == "unauthorized" {
+		if errors.Is(err, service.ErrUnauthorized) {
 			c.JSON(http.StatusForbidden, utils.ErrorResponse("Forbidden", err))
 			return
 		}
@@ -89,7 +90,7 @@ func (h *OAuthProviderConfigHandler) GetProviderConfig(c *gin.Context) {
 
 	config, err := h.providerService.GetProviderConfig(userID.(string), clientID, provider)
 	if err != nil {
-		if err.Error() == "unauthorized" {
+		if errors.Is(err, service.ErrUnauthorized) {
 			c.JSON(http.StatusForbidden, utils.ErrorResponse("Forbidden", err))
 			return
 		}
@@ -129,7 +130,7 @@ func (h *OAuthProviderConfigHandler) DeleteProviderConfig(c *gin.Context) {
 
 	err := h.providerService.DeleteProviderConfig(userID.(string), clientID, provider)
 	if err != nil {
-		if err.Error() == "unauthorized" {
+		if errors.Is(err, service.ErrUnauthorized) {
 			c.JSON(http.StatusForbidden, utils.ErrorResponse("Forbidden", err))
 			return
 		}

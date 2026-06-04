@@ -14,16 +14,10 @@ func Encrypt(plaintext string, key string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
-	
+
 	keyBytes := []byte(key)
-	// Ensure key is 32 bytes (256 bit) for AES-256
-	if len(keyBytes) > 32 {
-		keyBytes = keyBytes[:32]
-	} else if len(keyBytes) < 32 {
-		// Pad with 0 if less than 32
-		padded := make([]byte, 32)
-		copy(padded, keyBytes)
-		keyBytes = padded
+	if len(keyBytes) != 32 {
+		return "", errors.New("encryption key must be exactly 32 bytes")
 	}
 
 	block, err := aes.NewCipher(keyBytes)
@@ -57,12 +51,8 @@ func Decrypt(cryptoText string, key string) (string, error) {
 	}
 
 	keyBytes := []byte(key)
-	if len(keyBytes) > 32 {
-		keyBytes = keyBytes[:32]
-	} else if len(keyBytes) < 32 {
-		padded := make([]byte, 32)
-		copy(padded, keyBytes)
-		keyBytes = padded
+	if len(keyBytes) != 32 {
+		return "", errors.New("encryption key must be exactly 32 bytes")
 	}
 
 	block, err := aes.NewCipher(keyBytes)

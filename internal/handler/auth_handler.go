@@ -504,19 +504,19 @@ func (h *AuthHandler) RevokeSession(c *gin.Context) {
 func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 	clientID := c.Query("client_id")
 
-	state, err := h.oauthService.GenerateState()
+	rawState, err := h.oauthService.GenerateState()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.ErrorResponse("Failed to generate state", err))
 		return
 	}
 
+	state := rawState
+	if clientID != "" {
+		state = rawState + "|" + clientID
+	}
+
 	// Store state in cookie for verification
 	c.SetCookie("oauth_state", state, 3600, "/", "", false, true) // Secure should be true in prod
-	if clientID != "" {
-		c.SetCookie("oauth_client_id", clientID, 3600, "/", "", false, true)
-	} else {
-		c.SetCookie("oauth_client_id", "", -1, "/", "", false, true)
-	}
 
 	url, err := h.oauthService.GetGoogleAuthURL(clientID, state)
 	if err != nil {
@@ -541,11 +541,13 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 		return
 	}
 
-	clientID, _ := c.Cookie("oauth_client_id")
+	clientID := ""
+	if parts := strings.Split(state, "|"); len(parts) > 1 {
+		clientID = parts[1]
+	}
 
-	// Clear cookies
+	// Clear state cookie
 	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
-	c.SetCookie("oauth_client_id", "", -1, "/", "", false, true)
 
 	// Exchange code
 	token, err := h.oauthService.ExchangeGoogleCode(c.Request.Context(), clientID, code)
@@ -572,7 +574,7 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	// Login or Register
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader(userAgentHeader)
-	
+
 	loginResp, err := h.authService.LoginWithOAuth(email, oauthID, firstName, lastName, "google", ipAddress, userAgent)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.ErrorResponse(msgLoginFailed, err))
@@ -593,18 +595,19 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 func (h *AuthHandler) GitHubLogin(c *gin.Context) {
 	clientID := c.Query("client_id")
 
-	state, err := h.oauthService.GenerateState()
+	rawState, err := h.oauthService.GenerateState()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.ErrorResponse("Failed to generate state", err))
 		return
 	}
 
-	c.SetCookie("oauth_state", state, 3600, "/", "", false, true)
+	state := rawState
 	if clientID != "" {
-		c.SetCookie("oauth_client_id", clientID, 3600, "/", "", false, true)
-	} else {
-		c.SetCookie("oauth_client_id", "", -1, "/", "", false, true)
+		state = rawState + "|" + clientID
 	}
+
+	// Store state in cookie for verification
+	c.SetCookie("oauth_state", state, 3600, "/", "", false, true) // Secure should be true in prod
 
 	url, err := h.oauthService.GetGitHubAuthURL(clientID, state)
 	if err != nil {
@@ -628,10 +631,13 @@ func (h *AuthHandler) GitHubCallback(c *gin.Context) {
 		return
 	}
 
-	clientID, _ := c.Cookie("oauth_client_id")
+	clientID := ""
+	if parts := strings.Split(state, "|"); len(parts) > 1 {
+		clientID = parts[1]
+	}
 
+	// Clear state cookie
 	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
-	c.SetCookie("oauth_client_id", "", -1, "/", "", false, true)
 
 	token, err := h.oauthService.ExchangeGitHubCode(c.Request.Context(), clientID, code)
 	if err != nil {
@@ -646,7 +652,7 @@ func (h *AuthHandler) GitHubCallback(c *gin.Context) {
 	}
 
 	email := userInfo["email"].(string)
-	
+
 	// GitHub names are often one string "Name" or just login
 	firstName := ""
 	lastName := ""
@@ -659,12 +665,12 @@ func (h *AuthHandler) GitHubCallback(c *gin.Context) {
 	} else {
 		firstName = userInfo["login"].(string)
 	}
-	
+
 	oauthID := fmt.Sprintf("%.0f", userInfo["id"].(float64)) // GitHub ID is number
 
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader(userAgentHeader)
-	
+
 	loginResp, err := h.authService.LoginWithOAuth(email, oauthID, firstName, lastName, "github", ipAddress, userAgent)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.ErrorResponse("Login failed", err))

@@ -16,6 +16,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var ErrUnauthorized = errors.New("unauthorized")
+
 type OAuthProviderService struct {
 	clientRepo   *repository.OAuthClientRepository
 	codeRepo     *repository.AuthorizationCodeRepository
@@ -312,12 +314,14 @@ func generateRandomString(length int) (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
 }
 
-
 // CreateOrUpdateProviderConfig creates or updates provider configurations for a client
 func (s *OAuthProviderService) CreateOrUpdateProviderConfig(ownerID, clientID, provider, providerClientID, providerClientSecret string) error {
 	client, err := s.clientRepo.FindByID(clientID)
-	if err != nil || client.OwnerID != ownerID {
-		return errors.New("unauthorized")
+	if err != nil {
+		return err
+	}
+	if client.OwnerID != ownerID {
+		return ErrUnauthorized
 	}
 
 	encryptedSecret, err := utils.Encrypt(providerClientSecret, s.cfg.Security.EncryptionKey)
@@ -345,8 +349,11 @@ func (s *OAuthProviderService) CreateOrUpdateProviderConfig(ownerID, clientID, p
 // GetProviderConfig returns the provider config if the user owns the client
 func (s *OAuthProviderService) GetProviderConfig(ownerID, clientID, provider string) (*models.OAuthProviderConfig, error) {
 	client, err := s.clientRepo.FindByID(clientID)
-	if err != nil || client.OwnerID != ownerID {
-		return nil, errors.New("unauthorized")
+	if err != nil {
+		return nil, err
+	}
+	if client.OwnerID != ownerID {
+		return nil, ErrUnauthorized
 	}
 
 	config, err := s.configRepo.FindByClientAndProvider(clientID, provider)
@@ -360,8 +367,11 @@ func (s *OAuthProviderService) GetProviderConfig(ownerID, clientID, provider str
 // DeleteProviderConfig removes the provider configuration
 func (s *OAuthProviderService) DeleteProviderConfig(ownerID, clientID, provider string) error {
 	client, err := s.clientRepo.FindByID(clientID)
-	if err != nil || client.OwnerID != ownerID {
-		return errors.New("unauthorized")
+	if err != nil {
+		return err
+	}
+	if client.OwnerID != ownerID {
+		return ErrUnauthorized
 	}
 
 	config, err := s.configRepo.FindByClientAndProvider(clientID, provider)
@@ -371,4 +381,3 @@ func (s *OAuthProviderService) DeleteProviderConfig(ownerID, clientID, provider 
 
 	return s.configRepo.Delete(config.ID)
 }
-

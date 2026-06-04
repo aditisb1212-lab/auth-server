@@ -145,12 +145,12 @@ type CreateOAuthClientResponse struct {
 }
 
 type OAuthClientData struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	ClientID     string   `json:"client_id"`
-	ClientSecret string   `json:"client_secret"` // Only in creation response
-	RedirectURIs []string `json:"redirect_uris"`
-	Scopes       []string `json:"scopes"`
+	ID           string      `json:"id"`
+	Name         string      `json:"name"`
+	ClientID     string      `json:"client_id"`
+	ClientSecret string      `json:"client_secret"` // Only in creation response
+	RedirectURIs []string    `json:"redirect_uris"`
+	Scopes       []string    `json:"scopes"`
 	CreatedAt    interface{} `json:"created_at"`
 }
 

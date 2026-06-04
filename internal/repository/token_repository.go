@@ -8,7 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 var ErrRefreshTokenNotFound = errors.New("refresh token not found")
 
 type TokenRepository struct {
@@ -64,7 +63,7 @@ func (r *TokenRepository) RevokeRefreshToken(tokenString string) error {
 	result := r.db.Model(&models.RefreshToken{}).
 		Where("token = ?", tokenString).
 		Update("is_revoked", true)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
@@ -79,7 +78,7 @@ func (r *TokenRepository) RevokeRefreshTokenByID(id string) error {
 	result := r.db.Model(&models.RefreshToken{}).
 		Where("id = ?", id).
 		Update("is_revoked", true)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
@@ -100,7 +99,7 @@ func (r *TokenRepository) RevokeAllUserTokens(userID string) error {
 func (r *TokenRepository) DeleteExpiredTokens() (int64, error) {
 	result := r.db.Where("expires_at < ?", time.Now()).
 		Delete(&models.RefreshToken{})
-	
+
 	if result.Error != nil {
 		return 0, result.Error
 	}
@@ -112,7 +111,7 @@ func (r *TokenRepository) DeleteRevokedTokens(olderThan time.Duration) (int64, e
 	cutoffTime := time.Now().Add(-olderThan)
 	result := r.db.Where("is_revoked = ? AND updated_at < ?", true, cutoffTime).
 		Delete(&models.RefreshToken{})
-	
+
 	if result.Error != nil {
 		return 0, result.Error
 	}
