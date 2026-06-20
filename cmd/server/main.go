@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/roshankumar0036singh/auth-server/internal/config"
+	"github.com/roshankumar0036singh/auth-server/internal/metrics"
+	"github.com/roshankumar0036singh/auth-server/internal/middleware"
 	"github.com/roshankumar0036singh/auth-server/internal/models"
 	"github.com/roshankumar0036singh/auth-server/internal/routes"
 )
@@ -37,6 +40,8 @@ import (
 func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
+
+	metrics.Register()
 
 	// Initialize database
 	db := config.InitDatabase(cfg)
@@ -76,6 +81,11 @@ func main() {
 	}
 
 	router := gin.Default()
+
+	router.Use(middleware.PrometheusMiddleware())
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Load HTML templates for OAuth consent
 	router.LoadHTMLGlob("templates/*")
