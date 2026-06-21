@@ -45,6 +45,30 @@ func main() {
 	// Initialize database
 	db := config.InitDatabase(cfg)
 
+	// Apply Connection Pool Configuration
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal("Failed to get database instance:", err)
+	}
+
+	sqlDB.SetMaxOpenConns(100)
+	log.Printf("✓ MaxOpenConns set to: 100")
+
+	sqlDB.SetMaxIdleConns(25)
+	log.Printf("✓ MaxIdleConns set to: 25")
+
+	sqlDB.SetConnMaxLifetime(10 * time.Minute)
+	log.Printf("✓ ConnMaxLifetime set to: 10m")
+
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	log.Printf("✓ ConnMaxIdleTime set to: 5m")
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+	log.Println("✓ Database connection pool configured successfully")
+
 	// Pre-migration backfill for refresh_tokens.family_id
 	// Add column as nullable first to allow backfill
 	if err := db.Exec("ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id uuid").Error; err != nil {
