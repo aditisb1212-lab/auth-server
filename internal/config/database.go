@@ -35,6 +35,16 @@ func InitDatabase(cfg *Config) *gorm.DB {
 	sqlDB.SetMaxOpenConns(cfg.Database.PoolMax)
 	sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(cfg.Database.ConnMaxIdleTime)
+	
+	sqlDB.SetMaxConnMaxLifetime(10 * time.Minute)
+	log.Println("✓ ConnMaxLifetime set to: 10 minutes")
+
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	log.Println("✓ ConnMaxIdleTime set to: 5 minutes")
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
 
 	log.Println("Database connected successfully")
 
