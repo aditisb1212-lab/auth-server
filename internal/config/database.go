@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -32,7 +33,20 @@ func InitDatabase(cfg *Config) *gorm.DB {
 
 	// Set connection pool settings
 	sqlDB.SetMaxIdleConns(cfg.Database.PoolMin)
+	log.Printf("✓ MaxIdleConns set to: %d", cfg.Database.PoolMin)
+	
 	sqlDB.SetMaxOpenConns(cfg.Database.PoolMax)
+	log.Printf("✓ MaxOpenConns set to: %d", cfg.Database.PoolMax)
+
+	sqlDB.SetConnMaxLifetime(10 * time.Minute)
+	log.Println("✓ ConnMaxLifetime set to: 10 minutes")
+
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	log.Println("✓ ConnMaxIdleTime set to: 5 minutes")
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
 
 	log.Println("Database connected successfully")
 
