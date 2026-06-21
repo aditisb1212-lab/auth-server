@@ -11,9 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/roshankumar0036singh/auth-server/internal/config"
+	"github.com/roshankumar0036singh/auth-server/internal/metrics"
+	"github.com/roshankumar0036singh/auth-server/internal/middleware"
 	"github.com/roshankumar0036singh/auth-server/internal/models"
 	"github.com/roshankumar0036singh/auth-server/internal/routes"
+	"github.com/roshankumar0036singh/auth-server/internal/repository"
 )
 
 // @title Auth Server API
@@ -72,10 +76,43 @@ func main() {
 
 	// Setup Gin
 	if cfg.App.Env == "production" {
+
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	tokenRepo := repository.NewTokenRepository(db)
+
+	metrics.Register(tokenRepo)
+
 	router := gin.Default()
+
+	router.Use(middleware.PrometheusMiddleware())
+
+	// Prometheus metrics endpoint
+
+	metricsAddr := os.Getenv("METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = "127.0.0.1:9090"
+	}
+
+	metricsServer := &http.Server{
+		Addr:              metricsAddr,
+		Handler:           promhttp.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	go func() {
+
+		log.Printf("📊 Prometheus metrics exposed on http://%s/metrics", metricsAddr)
+
+		if err := metricsServer.ListenAndServe(); err != nil &&
+			err != http.ErrServerClosed {
+			log.Printf("Metrics server error: %v", err)
+		}
+	}()
 
 	// Load HTML templates for OAuth consent
 	router.LoadHTMLGlob("templates/*")
@@ -137,6 +174,13 @@ func main() {
 	// Shutdown HTTP server
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
+	}
+
+	// Shutdown metrics server
+	metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer metricsCancel()
+	if err := metricsServer.Shutdown(metricsCtx); err != nil {
+		log.Printf("Metrics server forced to shutdown: %v", err)
 	}
 
 	// Close database connection

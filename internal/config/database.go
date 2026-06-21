@@ -38,10 +38,32 @@ func InitDatabase(dbConfig DBConfig) error {
         return fmt.Errorf("failed to get database instance: %w", err)
     }
 
-    // Configure Connection Pool (KEY SETTINGS!)
-   
-    sqlDB.SetMaxOpenConns(dbConfig.MaxOpenConns)
-    log.Printf("✓ MaxOpenConns set to: %d", dbConfig.MaxOpenConns)
+// ============================================
+	// Connection Pool Configuration
+	// ============================================
+	
+	// Set max idle connections
+	sqlDB.SetMaxIdleConns(cfg.Database.PoolMin)
+	log.Printf("✓ MaxIdleConns set to: %d", cfg.Database.PoolMin)
+
+	// Set max open connections
+	sqlDB.SetMaxOpenConns(cfg.Database.PoolMax)
+	log.Printf("✓ MaxOpenConns set to: %d", cfg.Database.PoolMax)
+
+	// Set connection max lifetime
+	sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+	log.Printf("✓ ConnMaxLifetime set to: %v", cfg.Database.ConnMaxLifetime)
+
+	// Set connection max idle time
+	sqlDB.SetConnMaxIdleTime(cfg.Database.ConnMaxIdleTime)
+	log.Printf("✓ ConnMaxIdleTime set to: %v", cfg.Database.ConnMaxIdleTime)
+
+	// Verify connection
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+
+	log.Println("✓ Database connection pool configured successfully")
 
     sqlDB.SetMaxIdleConns(dbConfig.MaxIdleConns)
     log.Printf("✓ MaxIdleConns set to: %d", dbConfig.MaxIdleConns)

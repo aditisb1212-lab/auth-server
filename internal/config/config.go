@@ -18,6 +18,7 @@ type Config struct {
 	OAuth    OAuthConfig
 	Email    EmailConfig
 	Security SecurityConfig
+	WebAuthn WebAuthnConfig
 }
 
 type AppConfig struct {
@@ -26,10 +27,18 @@ type AppConfig struct {
 	URL  string
 }
 
+type WebAuthnConfig struct {
+	RPDisplayName string
+	RPID          string
+	RPOrigins     []string
+}
+
 type DatabaseConfig struct {
-	URL     string
-	PoolMin int
-	PoolMax int
+	URL             string
+	PoolMin         int
+	PoolMax         int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 }
 
 type RedisConfig struct {
@@ -207,9 +216,11 @@ func LoadConfig() *Config {
 			URL:  appURL,
 		},
 		Database: DatabaseConfig{
-			URL:     getEnv("DATABASE_URL", ""),
-			PoolMin: poolMin,
-			PoolMax: poolMax,
+			URL:             getEnv("DATABASE_URL", ""),
+			PoolMin:         poolMin,
+			PoolMax:         poolMax,
+			ConnMaxLifetime: getEnvAsDuration("DB_CONN_MAX_LIFETIME", 1*time.Hour),
+			ConnMaxIdleTime: getEnvAsDuration("DB_CONN_MAX_IDLE_TIME", 10*time.Minute),
 		},
 		Redis: RedisConfig{
 			URL: getEnv("REDIS_URL", ""),
@@ -251,6 +262,11 @@ func LoadConfig() *Config {
 
 			ForgotRateLimitMax:    forgotRateLimitMax,
 			ForgotRateLimitWindow: forgotRateLimitWindow,
+		},
+		WebAuthn: WebAuthnConfig{
+			RPDisplayName: getEnv("WEBAUTHN_RP_DISPLAY_NAME", "Auth Server"),
+			RPID:          getEnv("WEBAUTHN_RP_ID", "localhost"),
+			RPOrigins:     []string{appURL}, // Assuming APP_URL is the primary origin
 		},
 	}
 }

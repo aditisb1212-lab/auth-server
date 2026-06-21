@@ -9,6 +9,7 @@ import (
 
 	"github.com/roshankumar0036singh/auth-server/internal/config"
 	"github.com/roshankumar0036singh/auth-server/internal/dto"
+	"github.com/roshankumar0036singh/auth-server/internal/metrics"
 	"github.com/roshankumar0036singh/auth-server/internal/models"
 	"github.com/roshankumar0036singh/auth-server/internal/repository"
 	"github.com/roshankumar0036singh/auth-server/internal/utils"
@@ -434,7 +435,7 @@ func (s *AuthService) VerifyLoginMFA(mfaToken, code, ipAddress, userAgent string
 
 	s.cacheService.ResetMFAAttempts(ctx, userID)
 
-	response, err := s.createLoginResponse(user, ipAddress, userAgent)
+	response, err := s.CreateLoginResponse(user, ipAddress, userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +567,7 @@ func (s *AuthService) Login(req *dto.LoginRequest, ipAddress, userAgent string) 
 	if err != nil {
 		// Increment attempts even for non-existent users (to prevent enumeration)
 		s.cacheService.IncrementLoginAttempts(ctx, req.Email)
+		metrics.LoginFailureTotal.Inc()
 		return nil, errors.New("invalid email or password")
 	}
 
@@ -580,6 +582,10 @@ func (s *AuthService) Login(req *dto.LoginRequest, ipAddress, userAgent string) 
 		return nil, errors.New("invalid email or password")
 	}
 
+	return s.ProcessPostLogin(ctx, user, ipAddress, userAgent, false)
+}
+
+func (s *AuthService) ProcessPostLogin(ctx context.Context, user *models.User, ipAddress, userAgent string, skipMFA bool) (*dto.LoginResponse, error) {
 	// Reset failed attempts on successful login
 	if user.FailedLoginAttempts > 0 || user.LockedUntil != nil {
 		s.userRepo.Update(user.ID, map[string]interface{}{
@@ -589,17 +595,15 @@ func (s *AuthService) Login(req *dto.LoginRequest, ipAddress, userAgent string) 
 	}
 
 	// Reset Redis attempts too
-	s.cacheService.ResetLoginAttempts(ctx, req.Email)
+	s.cacheService.ResetLoginAttempts(ctx, user.Email)
 
 	// Check if user is active
 	if !user.IsActive {
 		return nil, errors.New("account is deactivated")
 	}
 
-	// Check MFA. The password step has succeeded; issue a short-lived
-	// MFA-pending token the client must present to /login/mfa. No access or
-	// refresh token is issued until the MFA code is verified.
-	if user.MFAEnabled {
+	// Check MFA
+	if user.MFAEnabled && !skipMFA {
 		mfaToken, err := s.tokenService.GenerateMFAToken(user.ID)
 		if err != nil {
 			return nil, err
@@ -612,10 +616,12 @@ func (s *AuthService) Login(req *dto.LoginRequest, ipAddress, userAgent string) 
 		log.Printf("Failed to update last login for user %s: %v", user.ID, err)
 	}
 
-	response, err := s.createLoginResponse(user, ipAddress, userAgent)
+	response, err := s.CreateLoginResponse(user, ipAddress, userAgent)
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.LoginSuccessTotal.Inc()
 
 	// Audit Log
 	s.auditService.LogEvent(&user.ID, "USER_LOGIN_SUCCESS", "USER", user.ID, ipAddress, userAgent, nil)
@@ -666,7 +672,7 @@ func (s *AuthService) LoginWithOAuth(email, oauthID, firstName, lastName, provid
 		}
 	}
 
-	response, err := s.createLoginResponse(user, ipAddress, userAgent)
+	response, err := s.CreateLoginResponse(user, ipAddress, userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -696,6 +702,8 @@ func (s *AuthService) handleFailedLogin(user *models.User, email string, ctx con
 	}
 
 	s.userRepo.Update(user.ID, updates)
+
+	metrics.LoginFailureTotal.Inc()
 
 	// Audit Log Failed Login
 	s.auditService.LogEvent(&user.ID, "USER_LOGIN_FAILED", "USER", user.ID, "", "", map[string]interface{}{"email": email})
@@ -734,12 +742,13 @@ func (s *AuthService) verifyRefreshTokenState(ctx context.Context, refreshTokenS
 		}
 		return nil, "", false, errors.New(errInvalidOrExpiredRefreshToken)
 	}
-	
+
 	return storedToken, claims.UserID, false, nil
 }
 
 func (s *AuthService) handleRevokedRefreshToken(ctx context.Context, storedToken *models.RefreshToken, userID, ipAddress, userAgent string) (*models.RefreshToken, bool, error) {
-	if time.Since(storedToken.UpdatedAt) <= s.getRefreshTokenGracePeriod() {
+	gracePeriod := s.getRefreshTokenGracePeriod()
+	if gracePeriod > 0 && time.Since(storedToken.UpdatedAt) <= gracePeriod {
 		activeToken, err := s.tokenRepo.FindActiveTokenInFamily(storedToken.FamilyID)
 		if err != nil {
 			return nil, false, errors.New("failed to verify refresh token state")
@@ -894,6 +903,15 @@ func (s *AuthService) GetUserByID(userID string) (*models.User, error) {
 	return user, nil
 }
 
+// GetUsers get all users by limit and offset [Pagination]
+func (s *AuthService) GetUsers(limit, offset int) (models.PaginatedUsers, error) {
+	users, err := s.userRepo.GetUsers(limit, offset)
+	if err != nil {
+		return models.PaginatedUsers{}, err
+	}
+	return users, nil
+}
+
 // GetUserSessions retrieves all active sessions for a user
 func (s *AuthService) GetUserSessions(userID string) ([]models.RefreshToken, error) {
 	tokens, err := s.tokenRepo.FindUserRefreshTokens(userID)
@@ -1033,7 +1051,7 @@ func (s *AuthService) UnlockUser(userID, adminID, ipAddress, userAgent string) e
 	return nil
 }
 
-func (s *AuthService) createLoginResponse(
+func (s *AuthService) CreateLoginResponse(
 	user *models.User,
 	ipAddress string,
 	userAgent string,
